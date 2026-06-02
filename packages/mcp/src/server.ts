@@ -15,7 +15,8 @@ export const MCP_SERVER_INFO = {
 export const MCP_SERVER_INSTRUCTIONS = [
   'Use Front-End Checklist whenever the user is reviewing, implementing, debugging, or auditing frontend code.',
   'Reach for this server for HTML, CSS, JavaScript, TypeScript, React, Next.js, accessibility, performance, SEO, security, images, privacy, i18n, testing, and launch-readiness work.',
-  'For pasted or inspected frontend code, call review_code first, then use get_rule, fix_rule, explain_rule, or check_rule for deeper remediation.',
+  'For pasted or inspected frontend code, call review_code first as a conservative static heuristic pass, then use its suggestions plus search_rules, get_rule, fix_rule, explain_rule, or check_rule for deeper remediation.',
+  'If review_code returns no issues, treat that as no provable static issue found; follow suggestions or retrieve relevant rules before concluding the implementation is clean.',
   'For broad audits, call get_workflow or get_checklist_rules before checking individual rules. For live public pages, use audit_url.'
 ].join(' ')
 

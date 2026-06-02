@@ -134,13 +134,16 @@ describe('SDK-backed MCP server', () => {
     })
 
     const withChecklistTools = (
-      withChecklists.json.result as { tools: Array<{ name: string; title?: string }> }
+      withChecklists.json.result as {
+        tools: Array<{ name: string; title?: string; description?: string }>
+      }
     ).tools
 
     expect(withChecklistTools.map(tool => tool.name)).toContain('get_workflow')
     expect(withChecklistTools.map(tool => tool.name)).toContain('get_checklist_rules')
     expect(withChecklistTools.find(tool => tool.name === 'review_code')).toMatchObject({
-      title: 'Review Frontend Code'
+      title: 'Review Frontend Code',
+      description: expect.stringContaining('non-exhaustive static heuristic review')
     })
 
     const withoutChecklists = await callMcp(

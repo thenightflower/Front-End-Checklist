@@ -1,5 +1,5 @@
 import { Heart } from '@repo/design-system/icons'
-import { fetchAllSponsors } from '@/lib/sponsors'
+import { fetchAllSponsors } from '@/lib/sponsors-server'
 import { SponsorsSection } from './sponsors-section'
 
 /**

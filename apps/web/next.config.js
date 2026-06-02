@@ -129,6 +129,21 @@ const nextConfig = {
   async redirects() {
     return [
       {
+        source: '/index',
+        destination: '/',
+        permanent: true
+      },
+      {
+        source: '/index.rsc',
+        destination: '/',
+        permanent: true
+      },
+      {
+        source: '/index.segments/:path*',
+        destination: '/',
+        permanent: true
+      },
+      {
         source: '/rules/seo/charset',
         destination: '/rules/html/charset',
         permanent: true

@@ -141,6 +141,10 @@ function rulesDetectedIn(html: string, focus?: string[]): string[] {
   return result.issues.map(i => i.rule)
 }
 
+function reviewResultIn(html: string, focus?: string[]) {
+  return executeReviewCode({ code: html, focus: focus as never, minPriority: 'low' }, RULES)
+}
+
 function noIssuesIn(html: string, ruleSlug: string, focus?: string[]): boolean {
   return !rulesDetectedIn(html, focus).includes(ruleSlug)
 }
@@ -256,6 +260,20 @@ describe('review_code — true positives (issues detected)', () => {
     const js = 'async function getData() { const data = await fetch("/api"); return data.json(); }'
     const rules = rulesDetectedIn(js, ['javascript'])
     expect(rules).toContain('error-handling')
+  })
+
+  it('does not add zero-finding guidance when static issues are found', () => {
+    const result = reviewResultIn('<div class="notification-popover"><img src="photo.jpg"></div>', [
+      'accessibility',
+      'html',
+      'images'
+    ])
+    const suggestions = result.suggestions.join('\n')
+
+    expect(result.issues.length).toBeGreaterThan(0)
+    expect(suggestions).not.toContain('No provable static issues')
+    expect(suggestions).not.toContain('For overlay/widget behavior')
+    expect(suggestions).not.toContain('For notification behavior')
   })
 
   it('detects third-party scripts without async/defer', () => {
@@ -957,6 +975,40 @@ describe('review_code — true negatives (no false positives)', () => {
     const html =
       '<!DOCTYPE html><html><head><title>T</title><meta name="description" content="ok"></head><body></body></html>'
     expect(noIssuesIn(html, 'meta-in-body', ['seo'])).toBe(true)
+  })
+
+  it('suggests manual rules for simplified notification popovers with no static findings', () => {
+    const jsx = `
+      export function HeaderNotifications() {
+        return (
+          <header>
+            <button type="button" aria-label="Open notifications popover">
+              Notifications
+            </button>
+            <div className="notification-popover responsive-container" data-state="closed">
+              <p>No new notifications</p>
+            </div>
+          </header>
+        )
+      }
+    `
+    const result = reviewResultIn(jsx, ['accessibility', 'css', 'html'])
+    const suggestions = result.suggestions.join('\n')
+
+    expect(result.issues).toHaveLength(0)
+    expect(result.summary.issuesFound).toBe(0)
+    expect(suggestions).toContain('No provable static issues')
+    expect(suggestions).toContain('keyboard-navigation')
+    expect(suggestions).toContain('focus-management')
+    expect(suggestions).toContain('focus-styles')
+    expect(suggestions).toContain('focus-not-obscured')
+    expect(suggestions).toContain('touch-targets')
+    expect(suggestions).toContain('accessible-notifications')
+    expect(suggestions).toContain('aria-live-regions')
+    expect(suggestions).toContain('horizontal-scroll')
+    expect(suggestions).toContain('zoom-reflow')
+    expect(suggestions).toContain('responsive-units')
+    expect(suggestions).toContain('container-queries')
   })
 })
 

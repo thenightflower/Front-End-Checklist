@@ -40,9 +40,9 @@ export interface ReviewCodeResult {
 export const reviewCodeDefinition = {
   name: 'review_code',
   title: 'Review Frontend Code',
-  description: `**PROACTIVE CODE REVIEW**: Automatically analyzes HTML/CSS/JS code against multiple frontend best practice rules simultaneously. **Use this tool FIRST** when reviewing, debugging, or improving any frontend code - it detects the code type and checks all relevant rules at once. Returns a prioritized list of issues with fix guidance. Much more efficient than checking rules one by one.
+  description: `**PROACTIVE CODE REVIEW**: Runs a conservative, non-exhaustive static heuristic review of HTML/CSS/JS code against multiple frontend best practice rules simultaneously. **Use this tool FIRST** when reviewing, debugging, or improving any frontend code - it detects the code type and checks relevant rules it can prove from the snippet. Returns prioritized issues with fix guidance when static evidence is available, plus suggestions for rule retrieval when manual or rendered-state review is needed.
 
-**Workflow:** Use as the FIRST step for any code review. For each issue found, use fix_rule for remediation guidance or get_rule for complete context. Use explain_rule to help users understand why issues matter.`,
+**Workflow:** Use as the FIRST step for any code review. For each issue found, use fix_rule for remediation guidance or get_rule for complete context. If no issues are returned, treat that as "no provable static issue found", then follow suggestions with search_rules or get_rule before concluding the implementation is clean.`,
   annotations: READ_ONLY_TOOL_ANNOTATIONS,
   inputSchema: {
     type: 'object' as const,
@@ -158,6 +158,40 @@ const IMPORTANT_THRESHOLD = 3 // >3 !important declarations suggests specificity
 const PX_SPACING_THRESHOLD = 3 // >3 px spacing values suggests missing relative units
 const CONSOLE_CALL_THRESHOLD = 2 // >2 console calls suggests debug code left in production
 
+const OVERLAY_WIDGET_PATTERNS = [
+  /\bpopover\b/i,
+  /\bdropdown\b/i,
+  /\bmenu\b/i,
+  /\blistbox\b/i,
+  /\bcombobox\b/i,
+  /\bdialog\b/i,
+  /\bmodal\b/i,
+  /\btooltip\b/i,
+  /\baccordion\b/i,
+  /\btabs?\b/i,
+  /\bdisclosure\b/i
+]
+
+const NOTIFICATION_PATTERNS = [
+  /\bnotifications?\b/i,
+  /\btoast\b/i,
+  /\bsnackbar\b/i,
+  /\balert\b/i,
+  /\bstatus\b/i,
+  /\baria-live\b/i,
+  /\blive region\b/i
+]
+
+const RESPONSIVE_CONTAINMENT_PATTERNS = [
+  /\bviewport\b/i,
+  /\bmobile\b/i,
+  /\bnarrow\b/i,
+  /\boverflow\b/i,
+  /\bhorizontal scroll\b/i,
+  /\bcontainer\b/i,
+  /\bresponsive\b/i
+]
+
 function hasHtmlLikeMarkup(code: string): boolean {
   return /<[a-z][\w:-]*(\s|>)/i.test(code)
 }
@@ -206,6 +240,96 @@ function isLikelyAsyncReactComponentSource(code: string): boolean {
   if (!hasAsyncComponentSignature) return false
 
   return /return\s*(?:\(\s*)?</s.test(code) || /\b(?:redirect|notFound)\s*\(/.test(code)
+}
+
+/**
+ * Check whether source text contains any topic pattern.
+ *
+ * @param code - Source snippet provided to review_code.
+ * @param patterns - Regular expressions for a guidance topic.
+ * @returns Whether any pattern matched the snippet.
+ */
+function matchesAnyPattern(code: string, patterns: RegExp[]): boolean {
+  return patterns.some(pattern => pattern.test(code))
+}
+
+/**
+ * Format rule slugs as a concrete get_rule next step for agents.
+ *
+ * @param ruleSlugs - Rule slugs that should be retrieved for manual guidance.
+ * @returns User-facing guidance string with exact get_rule calls.
+ */
+function formatRuleRetrieval(ruleSlugs: readonly string[]): string {
+  return ruleSlugs.map(slug => `get_rule("${slug}")`).join(', ')
+}
+
+/**
+ * Build review suggestions without turning uncertain manual checks into findings.
+ *
+ * @param code - Source snippet provided to review_code.
+ * @param categoriesToCheck - Categories selected by focus or auto-detection.
+ * @param issues - Static issues found by review_code.
+ * @returns Suggested follow-up tool calls and review areas.
+ */
+function buildReviewSuggestions(
+  code: string,
+  categoriesToCheck: Category[],
+  issues: ReviewIssue[]
+): string[] {
+  const suggestions: string[] = []
+
+  if (categoriesToCheck.includes('html') && !issues.some(i => i.rule.includes('semantic'))) {
+    suggestions.push(
+      'Consider using search_rules with query "semantic" for more HTML structure best practices'
+    )
+  }
+  if (categoriesToCheck.includes('accessibility')) {
+    suggestions.push(
+      'Run search_rules with categories=["accessibility"] for comprehensive a11y guidance'
+    )
+  }
+  if (categoriesToCheck.includes('performance')) {
+    suggestions.push('Check search_rules with categories=["performance"] for optimization tips')
+  }
+
+  if (issues.length > 0) {
+    return suggestions
+  }
+
+  suggestions.push(
+    'No provable static issues were found. This is a conservative heuristic result, not a clean bill of health; use search_rules or get_rule for relevant checklist guidance before concluding clean.'
+  )
+
+  if (matchesAnyPattern(code, OVERLAY_WIDGET_PATTERNS)) {
+    suggestions.push(
+      `For overlay/widget behavior, retrieve manual interaction rules: ${formatRuleRetrieval([
+        'keyboard-navigation',
+        'focus-management',
+        'focus-styles',
+        'focus-not-obscured',
+        'touch-targets'
+      ])}`
+    )
+  }
+
+  if (matchesAnyPattern(code, NOTIFICATION_PATTERNS)) {
+    suggestions.push(
+      `For notification behavior, retrieve live-announcement rules: ${formatRuleRetrieval([
+        'accessible-notifications',
+        'aria-live-regions'
+      ])}`
+    )
+  }
+
+  if (matchesAnyPattern(code, RESPONSIVE_CONTAINMENT_PATTERNS)) {
+    suggestions.push(
+      `For narrow viewport and containment behavior, retrieve responsive layout rules: ${formatRuleRetrieval(
+        ['horizontal-scroll', 'zoom-reflow', 'responsive-units', 'container-queries']
+      )}`
+    )
+  }
+
+  return suggestions
 }
 
 function shouldSuppressIssueForSourceContext(code: string, ruleSlug: string): boolean {
@@ -2266,21 +2390,7 @@ export function executeReviewCode(input: ReviewCodeInput, rules: Rule[]): Review
   // Sort issues by priority
   issues.sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority])
 
-  // Generate suggestions based on detected categories
-  const suggestions: string[] = []
-  if (categoriesToCheck.includes('html') && !issues.some(i => i.rule.includes('semantic'))) {
-    suggestions.push(
-      'Consider using search_rules with query "semantic" for more HTML structure best practices'
-    )
-  }
-  if (categoriesToCheck.includes('accessibility')) {
-    suggestions.push(
-      'Run search_rules with categories=["accessibility"] for comprehensive a11y guidance'
-    )
-  }
-  if (categoriesToCheck.includes('performance')) {
-    suggestions.push('Check search_rules with categories=["performance"] for optimization tips')
-  }
+  const suggestions = buildReviewSuggestions(code, categoriesToCheck, issues)
 
   return {
     summary: {

@@ -27,12 +27,13 @@ export function registerPrompts(server: McpServer, getChecklists: () => CuratedC
             type: 'text',
             text: [
               'Review the frontend code using the `review_code` tool.',
+              '`review_code` is a conservative static heuristic pass; zero issues means no provable static issue was found, not that the implementation is automatically clean.',
               ...(code
                 ? [`Code:\n${code}`]
                 : ['If I provide code next, pass it to `review_code`.']),
               ...(focus && focus.length > 0 ? [`Focus categories: ${focus.join(', ')}`] : []),
               ...(minPriority ? [`Minimum priority: ${minPriority}`] : []),
-              'Summarize issues by priority and call `fix_rule` only when remediation detail is needed.'
+              'Summarize issues by priority. If there are no issues, follow `review_code` suggestions with `search_rules` or `get_rule` before concluding clean. Call `fix_rule` only when remediation detail is needed.'
             ].join('\n\n')
           }
         }

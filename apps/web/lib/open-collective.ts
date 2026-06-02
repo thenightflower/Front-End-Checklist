@@ -151,8 +151,6 @@ export async function fetchOpenCollectiveSponsors(): Promise<OpenCollectiveSpons
           slug: OC_COLLECTIVE_SLUG
         }
       }),
-      // Cache for 1 hour
-      next: { revalidate: 3600 },
       ...getFetchTimeoutOptions()
     })
 
@@ -173,7 +171,6 @@ export async function fetchOpenCollectiveSponsors(): Promise<OpenCollectiveSpons
           query: MEMBERS_QUERY_ACCOUNT,
           variables: { slug: OC_COLLECTIVE_SLUG }
         }),
-        next: { revalidate: 3600 },
         ...getFetchTimeoutOptions()
       })
       if (accountResponse.ok) {

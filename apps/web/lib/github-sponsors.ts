@@ -73,8 +73,6 @@ export async function fetchGitHubSponsors(): Promise<SponsorsData> {
           login: GITHUB_SPONSORS_LOGIN
         }
       }),
-      // Cache for 1 hour
-      next: { revalidate: 3600 },
       ...getFetchTimeoutOptions()
     })
 
